@@ -119,7 +119,7 @@ function App() {
               <div className="pixel-title-wrapper">
                 <h1 className="pixel-title">
                   <span className="pixel-title-top">CHET'S</span>
-                  <span className="pixel-title-bottom">BATTLE<span className="title-accent">FIELD</span></span>
+                  <span className="pixel-title-bottom">BATTLE<span className="title-accent">SHIP</span></span>
                 </h1>
               </div>
               <div className="title-underline">
