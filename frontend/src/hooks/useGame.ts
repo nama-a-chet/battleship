@@ -35,7 +35,7 @@ export function useGame() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
-  const { connect: connectSSE, disconnect: disconnectSSE } = useGameStream({
+  const { connect: connectSSE, disconnect: disconnectSSE, flush: flushSSE } = useGameStream({
     onOpponentJoined: (data) => {
       setGameState(prev => prev ? {
         ...prev,
@@ -120,18 +120,23 @@ export function useGame() {
     const session = restoreSession()
     if (!session) return
 
+    // Connect SSE first in buffered mode so no events are lost while we fetch state
+    connectSSE(session.gameId, session.token, true)
+
     api.getState(session.gameId, session.token)
       .then(state => {
         setToken(session.token)
         setGameId(session.gameId)
         setGameState(state)
         setScreen(phaseToScreen(state.phase))
-        connectSSE(session.gameId, session.token)
+        // Replay any SSE events that arrived while we were fetching state
+        flushSSE()
       })
       .catch(() => {
+        disconnectSSE()
         clearSession()
       })
-  }, [connectSSE])
+  }, [connectSSE, flushSSE, disconnectSSE])
 
   const handleCreateGame = useCallback(async (name: string, mode: 'human' | 'ai') => {
     setLoading(true)
@@ -181,6 +186,8 @@ export function useGame() {
       await api.placeShips(gameId, token, ships)
       const state = await api.getState(gameId, token)
       setGameState(state)
+      // Clear draft placements only after backend has confirmed
+      sessionStorage.removeItem(`bf_placements_${gameId}`)
     } catch (e: unknown) {
       setError(getErrorMessage(e))
     } finally {

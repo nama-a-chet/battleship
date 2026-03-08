@@ -190,7 +190,6 @@ export default function ShipPlacement({ gameId, onConfirm, loading, opponentRead
 
   const handleConfirm = () => {
     if (!allPlaced) return
-    if (gameId) sessionStorage.removeItem(STORAGE_PREFIX + gameId)
     onConfirm(placements)
   }
 

@@ -44,11 +44,43 @@ export function useGameStream(handlers: GameStreamHandlers) {
   const sseRef = useRef<EventSource | null>(null)
   const handlersRef = useRef(handlers)
   handlersRef.current = handlers
+  const readyRef = useRef(true)
+  const bufferRef = useRef<Array<{ type: string; data: unknown }>>([])
 
-  const connect = useCallback((gameId: string, token: string) => {
+  const dispatchEvent = useCallback((type: string, data: unknown) => {
+    const h = handlersRef.current
+    switch (type) {
+      case 'opponent_joined':
+        h.onOpponentJoined?.(data as OpponentJoinedData)
+        break
+      case 'phase_change':
+        h.onPhaseChange?.(data as PhaseChangeData)
+        break
+      case 'opponent_ready':
+        h.onOpponentReady?.()
+        break
+      case 'shot_result':
+        h.onShotResult?.(data as ShotResultData)
+        break
+      case 'opponent_shot':
+        h.onOpponentShot?.(data as OpponentShotData)
+        break
+      case 'game_over':
+        h.onGameOver?.(data as GameOverData)
+        break
+      case 'opponent_reconnected':
+        h.onOpponentReconnected?.()
+        break
+    }
+  }, [])
+
+  const connect = useCallback((gameId: string, token: string, buffered = false) => {
     if (sseRef.current) {
       sseRef.current.close()
     }
+
+    readyRef.current = !buffered
+    bufferRef.current = []
 
     const es = api.createSSE(gameId, token)
     sseRef.current = es
@@ -57,33 +89,14 @@ export function useGameStream(handlers: GameStreamHandlers) {
       try {
         const payload = JSON.parse(event.data)
         const { type, data } = payload
-        const h = handlersRef.current
+        if (type === 'connected') return
 
-        switch (type) {
-          case 'connected':
-            break
-          case 'opponent_joined':
-            h.onOpponentJoined?.(data)
-            break
-          case 'phase_change':
-            h.onPhaseChange?.(data)
-            break
-          case 'opponent_ready':
-            h.onOpponentReady?.()
-            break
-          case 'shot_result':
-            h.onShotResult?.(data)
-            break
-          case 'opponent_shot':
-            h.onOpponentShot?.(data)
-            break
-          case 'game_over':
-            h.onGameOver?.(data)
-            break
-          case 'opponent_reconnected':
-            h.onOpponentReconnected?.()
-            break
+        if (!readyRef.current) {
+          bufferRef.current.push({ type, data })
+          return
         }
+
+        dispatchEvent(type, data)
       } catch {
         // Ignore parse errors (heartbeats)
       }
@@ -92,7 +105,15 @@ export function useGameStream(handlers: GameStreamHandlers) {
     es.onerror = () => {
       // EventSource auto-reconnects
     }
-  }, [])
+  }, [dispatchEvent])
+
+  const flush = useCallback(() => {
+    readyRef.current = true
+    for (const event of bufferRef.current) {
+      dispatchEvent(event.type, event.data)
+    }
+    bufferRef.current = []
+  }, [dispatchEvent])
 
   const disconnect = useCallback(() => {
     if (sseRef.current) {
@@ -110,5 +131,5 @@ export function useGameStream(handlers: GameStreamHandlers) {
     }
   }, [])
 
-  return { connect, disconnect }
+  return { connect, disconnect, flush }
 }

@@ -80,7 +80,7 @@ gunicorn main:app --bind 0.0.0.0:8084 --workers 1 --threads 20 --timeout 0
 
 - **Auth**: Bearer token (UUID) in `Authorization` header. SSE uses `?token=` query param (EventSource doesn't support headers).
 - **SSE heartbeat**: Sent every 30 seconds to keep connections alive through proxies/load balancers.
-- **Disconnect handling**: 2-second grace period for page reloads before forfeiting. AI games never forfeit on disconnect.
+- **Disconnect handling**: 5-second grace period for page reloads before forfeiting. AI games never forfeit on disconnect.
 - **AI turn**: Processed atomically under the same `game.lock` as the player's shot, so the client gets both results from a single `/fire` request.
 - **Game codes**: 6-char uppercase alphanumeric, deleted from the lookup dict once someone joins (preventing third-party joining).
 
