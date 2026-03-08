@@ -3,7 +3,7 @@
 ## Quick Reference
 
 - **Stack**: React 19 + TypeScript 5.9 + Vite 7
-- **Deployment**: Vercel (auto-detected, no vercel.json needed)
+- **Deployment**: Vercel with `vercel.json` SPA rewrite (needed for `/admin` route)
 - **Backend URL**: Set via `VITE_API_URL` env var (falls back to `/api` which Vite proxies to `localhost:8084` in dev)
 - **Build**: `npm run build` (runs `tsc -b && vite build`, output in `dist/`)
 - **Dev**: `npm run dev` (requires backend running on port 8084)
@@ -11,9 +11,9 @@
 
 ## Architecture
 
-### No Router
+### Routing
 
-The app uses state-based screen switching in `App.tsx` (not React Router). Five screens: `lobby → waiting → setup → playing → finished`. All navigation is driven by `useGame` hook state.
+The app uses state-based screen switching in `App.tsx` (not React Router). The `/admin` path is detected via `window.location.pathname` and renders the `Admin` component instead of the game. Game screens: `lobby → waiting → setup → playing → finished`. All game navigation is driven by `useGame` hook state.
 
 ### State Management
 
@@ -27,10 +27,11 @@ Single `useGame` hook owns all game state. No Redux/Zustand. State flows:
 |------|---------|
 | `hooks/useGame.ts` | Central game state, API orchestration |
 | `hooks/useGameStream.ts` | SSE connection lifecycle, typed event dispatch |
-| `services/api.ts` | All HTTP calls, generic `request<T>()` with Bearer auth |
+| `services/api.ts` | All HTTP calls, generic `request<T>()` with Bearer auth (game + admin) |
 | `utils/session.ts` | sessionStorage helpers (save/restore/clear) |
 | `types/game.ts` | All TypeScript types + constants (SHIPS, GRID_SIZE, etc.) |
 | `icons/index.ts` | Barrel file re-exporting pixelarticons SVGs as React components |
+| `components/Admin.tsx` | Password-protected admin page with game history table |
 
 ### CSS Architecture
 
@@ -40,7 +41,7 @@ Styles are split into shared (`src/styles/`) and component-colocated (`src/compo
 - `styles/forms.css` — inputs, toggles, form layout
 - Component CSS files imported directly by their component
 
-Theme uses CSS custom properties (`:root` / `[data-theme="light"]` in `index.css`). Toggle via `data-theme` attribute on `<html>`.
+Theme uses CSS custom properties (`:root` / `[data-theme="light"]` in `index.css`). Toggle via `data-theme` attribute on `<html>`. Theme preference persisted in localStorage.
 
 ## Critical Rules
 
@@ -48,8 +49,9 @@ Theme uses CSS custom properties (`:root` / `[data-theme="light"]` in `index.css
 - **All data access goes through `services/api.ts`** — never call external services or fetch directly from components.
 - **Icons must be imported from `@/icons`** — never import directly from `pixelarticons`. Add new icons to `icons/index.ts` first.
 - **SVGs use the `?react` suffix** for component imports (e.g., `import Foo from 'pixelarticons/svg/foo.svg?react'`).
-- **sessionStorage (not localStorage)** for game session — data clears when tab closes, preventing stale sessions.
+- **sessionStorage (not localStorage)** for game session data — data clears when tab closes, preventing stale sessions. Theme preference uses localStorage for persistence across sessions.
 - **Font loaded via Google Fonts in `index.html`** — Azeret Mono. Don't add it to CSS `@import`.
+- **`vercel.json` required** — SPA rewrite rule serves `index.html` for all routes (needed for `/admin`). Do not remove.
 
 ## Patterns to Follow
 

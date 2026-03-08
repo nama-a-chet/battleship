@@ -2,7 +2,7 @@
 
 ## Deployment
 
-- **Deployed to Render** 
+- **Deployed to Render**
 - Docker-based deployment using `Dockerfile`
 - Single Gunicorn worker, 20 threads, no request timeout (`--timeout 0` for SSE)
 
@@ -21,7 +21,7 @@ SSE streams are long-lived connections. Gunicorn's default 30-second timeout wou
 - Push SSE events OUTSIDE locks — `queue.put()` is thread-safe and avoids holding the lock during I/O.
 
 ### State is Ephemeral
-All game state lives in memory and is lost on server restart. A cleanup daemon removes games inactive for 30 minutes. There is no database.
+All game state lives in memory and is lost on server restart. A cleanup daemon removes games inactive for 30 minutes. There is no database. Game history is logged to a JSONL file on disk (`data/game_history.jsonl`) but this file is also lost on redeploy since Render's filesystem is ephemeral.
 
 ## Architecture
 
@@ -36,15 +36,21 @@ game/
   validation.py              # Ship placement + shot validation
   ai.py                      # AI opponent (probability heat map + direction locking)
   events.py                  # SSE push helpers
+  history.py                 # Game completion logging to JSONL file on disk
 request_handlers/
   game_routes.py             # Thin Flask routes (parse, auth, delegate to service)
+  admin_routes.py            # Password-protected admin endpoints (login, history)
+data/
+  game_history.jsonl         # Completed game records (created at runtime, ephemeral)
 ```
 
 ### Layer Responsibilities
 - **Routes** parse HTTP, extract tokens, call service functions, return JSON. No game logic here.
-- **Service** orchestrates game operations: acquires locks, mutates state, pushes SSE events, logs actions.
+- **Service** orchestrates game operations: acquires locks, mutates state, pushes SSE events, logs actions, records game completions to history.
 - **Models** define `Player` and `Game` dataclasses. Handle game creation, joining, and token-based lookup.
 - **AI** is self-contained: `ai_choose_shot()` picks targets, `process_shot()` applies them. AI fires back atomically within the same lock acquisition as the player's shot.
+- **History** appends a JSON record to `data/game_history.jsonl` on every game completion (win, forfeit, disconnect).
+- **Admin routes** provide password-protected access to game history. Login returns a session token; history endpoint requires it.
 
 ## Environment Variables
 
@@ -74,7 +80,8 @@ gunicorn main:app --bind 0.0.0.0:8084 --workers 1 --threads 20 --timeout 0
 2. Opponent joins with code (or AI is created automatically)
 3. Both players place ships → phase transitions to "playing"
 4. Players alternate shots until all opponent ships sunk
-5. Optional rematch resets to setup phase
+5. Game completion logged to `data/game_history.jsonl`
+6. Optional rematch resets to setup phase
 
 ## Key Implementation Details
 
@@ -83,6 +90,7 @@ gunicorn main:app --bind 0.0.0.0:8084 --workers 1 --threads 20 --timeout 0
 - **Disconnect handling**: 5-second grace period for page reloads before forfeiting. AI games never forfeit on disconnect.
 - **AI turn**: Processed atomically under the same `game.lock` as the player's shot, so the client gets both results from a single `/fire` request.
 - **Game codes**: 6-char uppercase alphanumeric, deleted from the lookup dict once someone joins (preventing third-party joining).
+- **Admin**: `/api/admin/login` accepts a password and returns a session token. `/api/admin/history` returns all logged game records (requires the token).
 
 ## Plans
 
